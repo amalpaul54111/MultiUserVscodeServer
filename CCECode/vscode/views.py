@@ -10,6 +10,9 @@ from django.contrib.auth.decorators import login_required
 from .forms import UserCreationForm
 from .models import Docker
 import subprocess
+import docker
+
+client = docker.from_env()
 
 # Create your views here.
 def register_request(request):
@@ -45,12 +48,19 @@ def user_login(request):
             except:
                 port = Docker.objects.filter(used=False).first()
                 print(port)
-                port.used = True;
-                port.user = user
                 print("Logged In")
-                output = subprocess.check_output(f'cd ../Files/{username} && docker run -it --init -dp {port.port}:3000 -v "$(pwd):/home/workspace:cached" code', shell=True)
-                print(output)
-                port.container = output
+                pwd  = subprocess.check_output('pwd', shell=True)
+                pwd = pwd.decode("utf-8").split('/')[:-1]
+                pwd = '/'.join(pwd)
+                # if(port.container != None):
+                #     container = client.containers.get(port.container).start()
+                # else:
+                #     container = client.containers.run(image="code", tty=True, init=True, detach=True, ports={'3000/tcp':f'{port.port}'}, volumes={f'{pwd}/Files/{username}':{'bind':'/home/workspace','mode':'rw'}})
+                #     port.container = container.id
+                container = client.containers.run(image="code", tty=True, init=True, detach=True, ports={'3000/tcp':f'{port.port}'}, volumes={f'{pwd}/Files/{username}':{'bind':'/home/workspace','mode':'rw'}})
+                port.container = container.id
+                port.user = user
+                port.used = True;
                 port.save()
                 return redirect('/')
         else:
@@ -60,11 +70,12 @@ def user_login(request):
 	    return render (request=request, template_name="index.html",context=context)
 
 def user_logout(request):
-    docker = Docker.objects.get(user=request.user)
-    docker.used = False
-    docker.user = None
-    output = subprocess.check_output(f'docker stop {docker.container}')
-    docker.save()
+    our_docker = Docker.objects.get(user=request.user)
+    our_docker.used = False
+    our_docker.user = None
+    container = client.containers.get(our_docker.container)
+    container.stop()
+    our_docker.save()
     logout(request)
     return redirect('/login')
 
@@ -72,6 +83,7 @@ def user_logout(request):
 @login_required(login_url="/login")
 def homepage(request):
     base_url = "http://localhost:"
-    port = Docker.objects.get(user = request.user)
-    url = base_url + port.port
+    our_docker = Docker.objects.get(user = request.user)
+    url = base_url + our_docker.port
+    print(client.containers.get(our_docker.container).id)
     return render(request=request, template_name="vscode.html", context={"url":url})

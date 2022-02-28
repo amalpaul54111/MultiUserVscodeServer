@@ -10,4 +10,7 @@ class Docker(models.Model):
     container = models.CharField(max_length=65,null=True, blank=True)
     
     def __str__(self):
-        return self.port
+        if(self.used):
+            return f"{self.port} Used"
+        else:
+            return self.port
